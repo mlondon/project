@@ -89,8 +89,8 @@ struct slob_block {
 };
 typedef struct slob_block slob_t;
 
-unsigned int slob_amt_claimed = 0;
-unsigned int slob_amt_free = 0;
+unsigned int slobClaimed = 0;
+unsigned int slobPage = 0;
 
 /*
  * We use struct page fields to manage some slob allocation aspects,
@@ -339,7 +339,7 @@ static void *slob_page_alloc(struct slob_page *sp, size_t size, int align)
 	smallest_block = find_smallest_block(sp,size,align);
 
 	if(smallest_block)
-	  early_printk("!");
+	  slobClaimed += size;
 	else
 	  return NULL;
 
@@ -424,7 +424,6 @@ static void *slob_alloc(size_t size, gfp_t gfp, int align, int node)
 
 		/* Attempt to alloc */
 		prev = sp->list.prev;
-		slob_amt_free += size;
 		b = slob_page_alloc(sp, size, align);
 		if (!b)
 			continue;
@@ -457,7 +456,7 @@ static void *slob_alloc(size_t size, gfp_t gfp, int align, int node)
 		BUG_ON(!b);
 		spin_unlock_irqrestore(&slob_lock, flags);
 
-		slob_amt_claimed += PAGE_SIZE;
+		slobPage += PAGE_SIZE;
 
 	}
 	if (unlikely((gfp & __GFP_ZERO) && b))
@@ -481,7 +480,7 @@ static void slob_free(void *block, int size)
 
 	sp = slob_page(block);
 	units = SLOB_UNITS(size);
-	slob_amt_free -= size;
+	slobClaimed -= size;
 
 	spin_lock_irqsave(&slob_lock, flags);
 
@@ -492,7 +491,7 @@ static void slob_free(void *block, int size)
 		spin_unlock_irqrestore(&slob_lock, flags);
 		clear_slob_page(sp);
 		free_slob_page(sp);
-		slob_amt_claimed -= PAGE_SIZE;
+		slobPage -= PAGE_SIZE;
 		slob_free_pages(b, 0);
 		return;
 	}
@@ -784,10 +783,10 @@ void __init kmem_cache_init_late(void)
 
 asmlinkage long sys_get_slob_amt_claimed(void)
 {
-  return slob_amt_claimed;
+  return slobClaimed;
 }
 
 asmlinkage long sys_get_slob_amt_free(void)
 {
-  return slob_amt_claimed - slob_amt_free;
+  return slobPage - slobClaimed;
 }
