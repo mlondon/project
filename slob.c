@@ -268,80 +268,42 @@ static void slob_free_pages(void *b, int order)
 /*
  * Find the smallest free block.
  */
-static slob_t *find_smallest_block(struct slob_page *sp, size_t size, int align)
+static void *slob_page_alloc(struct slob_page *sp, size_t size, int align)
 {
 	slob_t *prev, *cur, *aligned = NULL;
 	int delta = 0, units = SLOB_UNITS(size);
 	slob_t *smallest_block = 0;
 
-
-	//early_printk(" Please.");
-
 	for (prev = NULL, cur = sp->free; ; prev = cur, cur = slob_next(cur)) {
 	  slobidx_t avail = slob_units(cur);
+	  slobidx_t smallest_size = 0;
 
-	  //early_printk(" SLAP");
-
+	  if(smallest_block) {
+	    smallest_size = slob_units(smallest_block);
+	  }
+	  
 	  if (align) {
-	    //early_printk("-a-");
 	    aligned = (slob_t *)ALIGN((unsigned long)cur, align);
 	    delta = aligned - cur;
-	    //early_printk("_a_");
 	  }
 
-	  //early_printk("-k-");
-
-
-	  if (avail >= units + delta){
-	    if (!smallest_block){
-	      //early_printk("-as-");
+	  if ((avail >= units + delta) && ((!smallest_block) || (avail <= smallest_size))) {
 	      smallest_block = cur;
-	      //early_printk("_as_");  
-	    }
-	    else if(avail <= slob_units(smallest_block)) {
-	      //early_printk("-as-");
-	      smallest_block = cur;
-	      //early_printk("_as_");  
-	    }
 	  }
 
-	  //early_printk("-l-");
-	    
 	  if (slob_last(cur)) {
-	    //early_printk("-sl-");
-	    if(!smallest_block)
-	      return NULL;
-	    else
-	      return smallest_block;
+	    goto small;
 	  }
-	  //early_printk("_sl_");
 	}
 
-	//early_printk("!!!");
-
-        if(!smallest_block)
-	  return NULL;
-	else
-	  return smallest_block;
-}
-
-/*
- * Allocate a slob block within a given slob_page sp.
- */
-static void *slob_page_alloc(struct slob_page *sp, size_t size, int align)
-{
-	slob_t *prev, *cur, *aligned = NULL;
-	int delta = 0, units = SLOB_UNITS(size);
-	slob_t *smallest_block = NULL;
-
-	//early_printk(" Bitch");
-
-	smallest_block = find_smallest_block(sp,size,align);
+ small:
+	delta = 0;
 
 	if(smallest_block)
 	  slobClaimed += size;
 	else
 	  return NULL;
+
 
 	for (prev = NULL, cur = sp->free; ; prev = cur, cur = slob_next(cur)) {
 	  if(cur == smallest_block) {
@@ -383,8 +345,6 @@ static void *slob_page_alloc(struct slob_page *sp, size_t size, int align)
 			return cur;
 		}
 	  }
-	  if(slob_last(cur))
-	    return NULL;
 	}
 }
 
@@ -459,6 +419,7 @@ static void *slob_alloc(size_t size, gfp_t gfp, int align, int node)
 		slobPage += PAGE_SIZE;
 
 	}
+
 	if (unlikely((gfp & __GFP_ZERO) && b))
 		memset(b, 0, size);
 	return b;
