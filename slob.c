@@ -275,6 +275,7 @@ static void *slob_page_alloc(struct slob_page *sp, size_t size, int align)
 	int delta = 0, units = SLOB_UNITS(size);
 	slob_t *smallest_block = 0;
 
+	//find best block in page sp.
 	for (prev = NULL, cur = sp->free; ; prev = cur, cur = slob_next(cur)) {
 	  slobidx_t avail = slob_units(cur);
 	  slobidx_t smallest_size = 0;
@@ -287,7 +288,8 @@ static void *slob_page_alloc(struct slob_page *sp, size_t size, int align)
 	    aligned = (slob_t *)ALIGN((unsigned long)cur, align);
 	    delta = aligned - cur;
 	  }
-
+		
+	  //does block fit best bloct conditions.
 	  if ((avail >= units + delta) && ((!smallest_block) || (avail <= smallest_size))) {
 	      smallest_block = cur;
 	      usePrev = prev;
@@ -298,17 +300,20 @@ static void *slob_page_alloc(struct slob_page *sp, size_t size, int align)
 	  }
 	}
 
+ //done looking though page sp for block.
  small:
+ 	//reset delta and set cur and prev pointers to best block
 	delta = 0;
 	cur = smallest_block;
 	prev = usePrev;
 
+	//if best block, update claimed stat and continue. else, return nULL.
 	if(smallest_block)
 	  slobClaimed += size;
 	else
 	  return NULL;
 
-
+	//allocate smallest block. DO one more sanity check.
 	if(cur == smallest_block) {
 	  slobidx_t avail = slob_units(cur);
 	  
@@ -419,6 +424,7 @@ static void *slob_alloc(size_t size, gfp_t gfp, int align, int node)
 		BUG_ON(!b);
 		spin_unlock_irqrestore(&slob_lock, flags);
 
+		//update total number of block in all papges
 		slobPage += PAGE_SIZE;
 
 	}
@@ -444,6 +450,7 @@ static void slob_free(void *block, int size)
 
 	sp = slob_page(block);
 	units = SLOB_UNITS(size);
+	//update claimed blocks
 	slobClaimed -= size;
 
 	spin_lock_irqsave(&slob_lock, flags);
@@ -455,6 +462,8 @@ static void slob_free(void *block, int size)
 		spin_unlock_irqrestore(&slob_lock, flags);
 		clear_slob_page(sp);
 		free_slob_page(sp);
+		
+		//update total number of block in a pages
 		slobPage -= PAGE_SIZE;
 		slob_free_pages(b, 0);
 		return;
@@ -744,12 +753,13 @@ void __init kmem_cache_init_late(void)
 }
 
 
-
+//return the amount of blocks claimes
 asmlinkage long sys_get_slob_amt_claimed(void)
 {
   return slobClaimed;
 }
 
+//return the amount of frree blocks
 asmlinkage long sys_get_slob_amt_free(void)
 {
   return slobPage - slobClaimed;
